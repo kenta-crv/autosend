@@ -1,44 +1,23 @@
-const axios = require('axios');
-const cheerio = require('cheerio');
+const WebsiteDetector = require('../services/websiteDetector');
 const logger = require('../config/logger');
 
 class UrlDetector {
+  constructor(browser = null) {
+    this.websiteDetector = new WebsiteDetector(browser);
+  }
+
   /**
-   * Detect company website from company name using search
+   * Detect company website from company name using WebsiteDetector
    */
-  static async detectWebsite(companyName) {
+  async detectWebsite(companyName) {
     try {
       logger.info(`Detecting website for: ${companyName}`);
       
-      // This is a placeholder - in production, you might want to:
-      // 1. Use a search API (Google Custom Search, Bing, etc.)
-      // 2. Use a business directory API
-      // 3. Use web scraping with proper rate limiting
+      const website = await this.websiteDetector.detectWebsite(companyName);
       
-      // For now, we'll try common patterns
-      const possibleDomains = [
-        `https://www.${companyName.toLowerCase().replace(/\s+/g, '')}.com`,
-        `https://${companyName.toLowerCase().replace(/\s+/g, '')}.com`,
-        `https://www.${companyName.toLowerCase().replace(/\s+/g, '-')}.com`,
-        `https://${companyName.toLowerCase().replace(/\s+/g, '-')}.com`
-      ];
-
-      for (const domain of possibleDomains) {
-        try {
-          const response = await axios.head(domain, { 
-            timeout: 5000,
-            maxRedirects: 5,
-            validateStatus: (status) => status < 500
-          });
-          
-          if (response.status === 200) {
-            logger.info(`Website detected: ${domain}`, { companyName });
-            return domain;
-          }
-        } catch (error) {
-          // Continue to next domain
-          continue;
-        }
+      if (website) {
+        logger.info(`Website detected: ${website}`);
+        return website;
       }
 
       logger.warn(`Could not detect website for: ${companyName}`);
@@ -53,20 +32,31 @@ class UrlDetector {
   }
 
   /**
-   * Validate if a URL is accessible
+   * Detect website and get additional info
    */
-  static async validateUrl(url) {
+  async detectWebsiteWithInfo(companyName) {
     try {
-      const response = await axios.head(url, {
-        timeout: 10000,
-        maxRedirects: 5,
-        validateStatus: (status) => status < 500
-      });
+      logger.info(`Detecting website with info for: ${companyName}`);
       
-      return response.status === 200;
+      const website = await this.websiteDetector.detectWebsite(companyName);
+      
+      if (!website) {
+        logger.warn(`Could not detect website for: ${companyName}`);
+        return null;
+      }
+
+      const info = await this.websiteDetector.getWebsiteInfo(website);
+      
+      return {
+        url: website,
+        ...info
+      };
+
     } catch (error) {
-      logger.debug(`URL validation failed for ${url}:`, { error: error.message });
-      return false;
+      logger.error(`Error in detectWebsiteWithInfo for ${companyName}:`, { 
+        error: error.message 
+      });
+      return null;
     }
   }
 
@@ -101,6 +91,29 @@ class UrlDetector {
       logger.error(`Cannot normalize URL: ${url}`, { error: error.message });
       return null;
     }
+  }
+
+  /**
+   * Validate if a URL is accessible
+   */
+  async validateUrl(url) {
+    return this.websiteDetector.quickValidate(url);
+  }
+
+  /**
+   * Check if URL looks like official company site
+   */
+  static looksLikeOfficialSite(url, companyName) {
+    const detector = new WebsiteDetector();
+    return detector.looksLikeOfficialSite(url, companyName);
+  }
+
+  /**
+   * Clean URL (remove tracking params, etc.)
+   */
+  static cleanUrl(url) {
+    const detector = new WebsiteDetector();
+    return detector.cleanUrl(url);
   }
 }
 

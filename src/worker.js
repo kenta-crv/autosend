@@ -1,7 +1,7 @@
 require('dotenv').config();
-import { process as _process, close } from './config/queue';
-import { info, error as _error } from './config/logger';
-import ContactFormProcessor from './services/contactFormProcessor';
+const queue = require('./config/queue');
+const { info, error: _error } = require('./config/logger');
+const ContactFormProcessor = require('./services/contactFormProcessor');
 
 // Create processor instance
 let processor = null;
@@ -67,7 +67,7 @@ async function startWorker() {
     info(`Worker concurrency: ${concurrency}`);
 
     // Process jobs from queue
-    _process(concurrency, async (job) => {
+    queue.process(concurrency, async (job) => {
       return await processJob(job);
     });
 
@@ -91,7 +91,7 @@ async function shutdown() {
 
   try {
     // Close queue
-    await close();
+    await queue.close();
     info('Queue closed');
 
     // Close processor

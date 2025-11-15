@@ -76,8 +76,8 @@ Examples:
         companies = [
           {
             id: 1,
-            name: 'WpBeginner',
-            homepage: 'https://www.wpbeginner.com',
+            name: 'Wp-Beginner',
+            homepage: '',
             contact_form_url: null
           },
           {
@@ -110,10 +110,8 @@ Examples:
         let loadResult;
         if (filepath.endsWith('.csv')) {
           loadResult = await CsvLoader.loadFromCsv(filepath);
-        } else if (filepath.endsWith('.json')) {
-          loadResult = await CsvLoader.loadFromJson(filepath);
-        } else {
-          logger.error('Unsupported file format. Use .csv or .json');
+        }  else {
+          logger.error('Unsupported file format. Use .csv');
           process.exit(1);
         }
 

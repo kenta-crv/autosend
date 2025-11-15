@@ -5,6 +5,8 @@ const logger = require('../config/logger');
 class ResultsManager {
   constructor() {
     this.resultsDir = process.env.RESULTS_OUTPUT_PATH || './results';
+    this.results = []; // Store all results in memory
+    this.currentBatchFile = null;
     this.ensureResultsDirectory();
   }
 
@@ -20,17 +22,38 @@ class ResultsManager {
   }
 
   /**
-   * Save individual result
+   * Save individual result (simplified format)
    */
   async saveResult(result) {
     try {
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-      const filename = `result_${result.id}_${timestamp}.json`;
-      const filepath = path.join(this.resultsDir, filename);
+      // Simplify the result to only required fields
+      const simplifiedResult = {
+        id: result.id,
+        name: result.name,
+        homepage: result.homepage || null,
+        contact_form_url: result.contact_form_url || null,
+        contact_form_detected: result.contact_form_detected || false,
+        bot_detected: result.submission?.hasCaptcha || false,
+        status: result.status,
+        message: this.generateMessage(result)
+      };
 
-      await fs.writeFile(filepath, JSON.stringify(result, null, 2));
+      // Add to in-memory collection
+      this.results.push(simplifiedResult);
+
+      // Initialize batch file if not exists
+      if (!this.currentBatchFile) {
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        this.currentBatchFile = path.join(this.resultsDir, `batch_${timestamp}.json`);
+      }
+
+      // Save entire batch to single file
+      await fs.writeFile(
+        this.currentBatchFile, 
+        JSON.stringify(this.results, null, 2)
+      );
       
-      logger.debug(`Result saved: ${filename}`);
+      logger.debug(`Result saved to batch file: ${this.currentBatchFile}`);
     } catch (error) {
       logger.error('Failed to save result:', { 
         companyId: result.id,
@@ -40,52 +63,87 @@ class ResultsManager {
   }
 
   /**
-   * Save batch results
+   * Generate message based on result
    */
-  async saveBatchResults(results, batchName = 'batch') {
-    try {
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-      const filename = `${batchName}_${timestamp}.json`;
-      const filepath = path.join(this.resultsDir, filename);
-
-      await fs.writeFile(filepath, JSON.stringify(results, null, 2));
-      
-      logger.info(`Batch results saved: ${filename}`);
-      return filepath;
-    } catch (error) {
-      logger.error('Failed to save batch results:', { error: error.message });
-      throw error;
+  generateMessage(result) {
+    if (result.status === 'SUCCESS') {
+      if (result.submission?.successDetected) {
+        return 'Form submitted successfully and success message detected';
+      } else {
+        return 'Form submitted successfully';
+      }
+    } else if (result.status === 'FAILED') {
+      if (result.submission?.hasCaptcha) {
+        return 'Form submission failed - CAPTCHA detected';
+      } else if (result.submission?.error) {
+        return `Form submission failed - ${result.submission.error}`;
+      } else {
+        return 'Form submission failed';
+      }
+    } else if (result.status === 'ERROR') {
+      return result.error || 'Processing error occurred';
     }
+    
+    return 'Unknown status';
+  }
+
+  /**
+   * Get current batch file path
+   */
+  getCurrentBatchFile() {
+    return this.currentBatchFile;
+  }
+
+  /**
+   * Get all results in memory
+   */
+  getResults() {
+    return this.results;
+  }
+
+  /**
+   * Clear results (for new batch)
+   */
+  clearResults() {
+    this.results = [];
+    this.currentBatchFile = null;
   }
 
   /**
    * Generate summary report
    */
-  async generateReport(results) {
+  async generateReport(results = null) {
     try {
+      const resultsToReport = results || this.results;
+      
+      if (resultsToReport.length === 0) {
+        logger.warn('No results to generate report');
+        return null;
+      }
+
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
       
       // Calculate statistics
-      const stats = this.calculateStatistics(results);
+      const stats = this.calculateStatistics(resultsToReport);
       
       // Generate report
       const report = {
         generated_at: new Date().toISOString(),
-        total_companies: results.length,
+        total_companies: resultsToReport.length,
         statistics: stats,
-        detailed_results: results
+        results: resultsToReport
       };
 
-      // Save JSON report
+      // Save JSON report (same as batch file if using in-memory results)
       const jsonFilename = `report_${timestamp}.json`;
       const jsonFilepath = path.join(this.resultsDir, jsonFilename);
       await fs.writeFile(jsonFilepath, JSON.stringify(report, null, 2));
 
       // Save text summary
-      const textFilename = `summary_${timestamp}.txt`;
-      const textFilepath = path.join(this.resultsDir, textFilename);
-      const textReport = this.generateTextReport(report);
-      await fs.writeFile(textFilepath, textReport);
+      // const textFilename = `summary_${timestamp}.txt`;
+      // const textFilepath = path.join(this.resultsDir, textFilename);
+      // const textReport = this.generateTextReport(report);
+      // await fs.writeFile(textFilepath, textReport);
 
       logger.info('=' .repeat(70));
       logger.info('FINAL REPORT GENERATED');
@@ -114,40 +172,25 @@ class ResultsManager {
     const failed = results.filter(r => r.status === 'FAILED').length;
     const errors = results.filter(r => r.status === 'ERROR').length;
 
-    const withCaptcha = results.filter(r => 
-      r.submission && r.submission.hasCaptcha
-    ).length;
+    const withCaptcha = results.filter(r => r.bot_detected).length;
 
     const contactFormsDetected = results.filter(r => 
       r.contact_form_detected
     ).length;
 
-    const avgProcessingTime = results.reduce((sum, r) => 
-      sum + (r.processing_time_ms || 0), 0
-    ) / total;
-
-    const successfulSubmissions = results.filter(r => 
-      r.submission && r.submission.success
-    ).length;
-
-    const detectedSuccess = results.filter(r => 
-      r.submission && r.submission.successDetected
+    const websiteDetected = results.filter(r => 
+      r.homepage && r.homepage !== null
     ).length;
 
     return {
       total_companies: total,
-      successful_processing: successful,
-      failed_processing: failed,
+      successful_submissions: successful,
+      failed_submissions: failed,
       errors: errors,
-      success_rate_percentage: ((successful / total) * 100).toFixed(2),
+      success_rate_percentage: total > 0 ? ((successful / total) * 100).toFixed(2) : '0.00',
       contact_forms_detected: contactFormsDetected,
-      successful_submissions: successfulSubmissions,
-      submission_success_rate_percentage: total > 0 
-        ? ((successfulSubmissions / total) * 100).toFixed(2)
-        : '0.00',
-      detected_success_responses: detectedSuccess,
-      forms_with_captcha: withCaptcha,
-      average_processing_time_ms: Math.round(avgProcessingTime)
+      websites_found: websiteDetected,
+      bot_captcha_detected: withCaptcha
     };
   }
 
@@ -167,45 +210,26 @@ class ResultsManager {
     text += 'STATISTICS\n';
     text += '-'.repeat(70) + '\n';
     text += `Total Companies Processed: ${stats.total_companies}\n`;
-    text += `Successful Processing: ${stats.successful_processing}\n`;
-    text += `Failed Processing: ${stats.failed_processing}\n`;
+    text += `Successful Submissions: ${stats.successful_submissions}\n`;
+    text += `Failed Submissions: ${stats.failed_submissions}\n`;
     text += `Errors: ${stats.errors}\n`;
     text += `Success Rate: ${stats.success_rate_percentage}%\n\n`;
 
     text += `Contact Forms Detected: ${stats.contact_forms_detected}\n`;
-    text += `Successful Submissions: ${stats.successful_submissions}\n`;
-    text += `Submission Success Rate: ${stats.submission_success_rate_percentage}%\n`;
-    text += `Success Responses Detected: ${stats.detected_success_responses}\n`;
-    text += `Forms with CAPTCHA: ${stats.forms_with_captcha}\n\n`;
-
-    text += `Average Processing Time: ${stats.average_processing_time_ms}ms\n\n`;
+    text += `Websites Found: ${stats.websites_found}\n`;
+    text += `Bot/CAPTCHA Detected: ${stats.bot_captcha_detected}\n\n`;
 
     text += 'DETAILED RESULTS\n';
     text += '-'.repeat(70) + '\n\n';
 
-    report.detailed_results.forEach((result, index) => {
+    report.results.forEach((result, index) => {
       text += `${index + 1}. ${result.name} (ID: ${result.id})\n`;
       text += `   Status: ${result.status}\n`;
       text += `   Homepage: ${result.homepage || 'N/A'}\n`;
       text += `   Contact URL: ${result.contact_form_url || 'N/A'}\n`;
-      
-      if (result.form_analysis) {
-        text += `   Form Fields: ${result.form_analysis.input_fields_count}\n`;
-      }
-      
-      if (result.submission) {
-        text += `   Submitted: ${result.submission.success}\n`;
-        text += `   Success Detected: ${result.submission.successDetected || false}\n`;
-        if (result.submission.hasCaptcha) {
-          text += `   Note: CAPTCHA detected\n`;
-        }
-      }
-      
-      if (result.error) {
-        text += `   Error: ${result.error}\n`;
-      }
-      
-      text += `   Processing Time: ${result.processing_time_ms}ms\n\n`;
+      text += `   Contact Form Detected: ${result.contact_form_detected ? 'Yes' : 'No'}\n`;
+      text += `   Bot Detected: ${result.bot_detected ? 'Yes' : 'No'}\n`;
+      text += `   Message: ${result.message}\n\n`;
     });
 
     return text;
@@ -217,16 +241,13 @@ class ResultsManager {
   logStatistics(stats) {
     logger.info('STATISTICS:');
     logger.info(`  Total Companies: ${stats.total_companies}`);
-    logger.info(`  Successful: ${stats.successful_processing}`);
-    logger.info(`  Failed: ${stats.failed_processing}`);
+    logger.info(`  Successful: ${stats.successful_submissions}`);
+    logger.info(`  Failed: ${stats.failed_submissions}`);
     logger.info(`  Errors: ${stats.errors}`);
     logger.info(`  Success Rate: ${stats.success_rate_percentage}%`);
     logger.info(`  Contact Forms Detected: ${stats.contact_forms_detected}`);
-    logger.info(`  Successful Submissions: ${stats.successful_submissions}`);
-    logger.info(`  Submission Success Rate: ${stats.submission_success_rate_percentage}%`);
-    logger.info(`  Success Responses: ${stats.detected_success_responses}`);
-    logger.info(`  Forms with CAPTCHA: ${stats.forms_with_captcha}`);
-    logger.info(`  Avg Processing Time: ${stats.average_processing_time_ms}ms`);
+    logger.info(`  Websites Found: ${stats.websites_found}`);
+    logger.info(`  Bot/CAPTCHA Detected: ${stats.bot_captcha_detected}`);
   }
 
   /**

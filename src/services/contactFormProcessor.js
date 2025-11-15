@@ -9,11 +9,12 @@ const ResultsManager = require('../utils/resultsManager');
 class ContactFormProcessor {
   constructor() {
     this.browser = null;
+    this.urlDetector = null;
     this.resultsManager = new ResultsManager();
   }
 
   /**
-   * Initialize browser
+   * Initialize browser and URL detector
    */
   async init() {
     try {
@@ -36,6 +37,11 @@ class ContactFormProcessor {
       });
 
       logger.info('Browser initialized successfully');
+
+      // Initialize URL detector with browser instance for enhanced detection
+      this.urlDetector = new UrlDetector(this.browser);
+      logger.info('URL detector initialized with Puppeteer support');
+
     } catch (error) {
       logger.error('Failed to initialize browser:', { 
         error: error.message,
@@ -75,7 +81,7 @@ class ContactFormProcessor {
       
       if (!homepage) {
         logger.info('No homepage provided, attempting to detect...');
-        homepage = await UrlDetector.detectWebsite(company.name);
+        homepage = await this.urlDetector.detectWebsite(company.name);
         
         if (!homepage) {
           throw new Error('Could not detect company website');
@@ -94,7 +100,7 @@ class ContactFormProcessor {
         logger.info('Contact form URL provided, validating...');
         contactFormUrl = UrlDetector.normalizeUrl(contactFormUrl);
         
-        const isValid = await UrlDetector.validateUrl(contactFormUrl);
+        const isValid = await this.urlDetector.validateUrl(contactFormUrl);
         if (!isValid) {
           logger.warn('Provided contact form URL is invalid, searching...');
           contactFormUrl = null;
