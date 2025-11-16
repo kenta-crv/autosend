@@ -7,16 +7,24 @@ class FormAnalyzer {
 
   /**
    * Extract and analyze all input fields from a page
+   * @param {string} url - The URL to analyze
+   * @param {Page} existingPage - Optional existing page to reuse
    */
-  async analyzeForm(url) {
-    let page;
+  async analyzeForm(url, existingPage = null) {
+    let page = existingPage;
+    const shouldClosePage = !existingPage; // Only close if we created it
+    
     try {
       logger.info(`Analyzing form at: ${url}`);
-      page = await this.browser.newPage();
       
-      // Set viewport and user agent
-      await page.setViewport({ width: 1920, height: 1080 });
-      await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+      // Create new page only if one wasn't provided
+      if (!page) {
+        page = await this.browser.newPage();
+        
+        // Set viewport and user agent
+        await page.setViewport({ width: 1920, height: 1080 });
+        await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+      }
       
       await page.goto(url, {
         waitUntil: 'networkidle2',
@@ -107,9 +115,6 @@ class FormAnalyzer {
         return forms;
       });
 
-      await page.close();
-      page = null;
-
       // Analyze and categorize forms
       const analyzedForms = formData.map(form => this.categorizeForm(form));
       
@@ -145,7 +150,8 @@ class FormAnalyzer {
         error: error.message
       };
     } finally {
-      if (page) {
+      // Only close page if we created it (not passed in)
+      if (page && shouldClosePage) {
         await page.close().catch(() => {});
       }
     }

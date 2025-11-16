@@ -71,17 +71,23 @@ class ContactFormProcessor {
   }
 
   /**
-   * Process a single company
+   * Process a single company - NOW WITH SINGLE PAGE REUSE
    */
   async processCompany(company) {
     const startTime = Date.now();
+    let page = null; // Single page instance for entire workflow
     
     logger.info('='.repeat(70));
     logger.info(`Processing: ${company.name} (ID: ${company.id})`);
     logger.info('='.repeat(70));
 
     try {
-      // Step 1: Determine homepage URL with priority: contact_url -> url_2 -> url -> detect
+      // Create ONE page for the entire workflow
+      page = await this.browser.newPage();
+      await page.setViewport({ width: 1920, height: 1080 });
+      await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+
+      // Step 1: Determine homepage URL
       let homepage = null;
       
       if (company.contact_url) {
@@ -109,7 +115,6 @@ class ContactFormProcessor {
       let contactFormUrl = company.contact_form_url;
       
       if (contactFormUrl) {
-        // Validate provided contact form URL
         logger.info('Contact form URL provided, validating...');
         contactFormUrl = UrlDetector.normalizeUrl(contactFormUrl);
         
@@ -121,13 +126,12 @@ class ContactFormProcessor {
       }
       
       if (!contactFormUrl) {
-        // Find contact page
+        // Find contact page - PASS THE PAGE INSTANCE
         logger.info('Searching for contact page...');
         const finder = new ContactPageFinder(this.browser);
-        contactFormUrl = await finder.findContactPage(homepage);
+        contactFormUrl = await finder.findContactPage(homepage, page);
         
         if (!contactFormUrl) {
-          // Return SKIPPED status instead of throwing error
           const processingTime = Date.now() - startTime;
           const result = {
             id: company.id,
@@ -150,13 +154,12 @@ class ContactFormProcessor {
 
       logger.info(`Contact form URL: ${contactFormUrl}`);
 
-      // Step 3: Analyze form
+      // Step 3: Analyze form - PASS THE PAGE INSTANCE
       logger.info('Analyzing contact form...');
       const analyzer = new FormAnalyzer(this.browser);
-      const formAnalysis = await analyzer.analyzeForm(contactFormUrl);
+      const formAnalysis = await analyzer.analyzeForm(contactFormUrl, page);
       
       if (!formAnalysis.contactForm) {
-        // Return SKIPPED status for no suitable form
         const processingTime = Date.now() - startTime;
         const result = {
           id: company.id,
@@ -178,12 +181,13 @@ class ContactFormProcessor {
 
       logger.info(`Found contact form with ${formAnalysis.contactForm.inputs.length} fields`);
 
-      // Step 4: Fill and submit form
+      // Step 4: Fill and submit form - PASS THE PAGE INSTANCE
       logger.info('Filling and submitting form...');
       const submitter = new FormSubmitter(this.browser);
       const submissionResult = await submitter.submitForm(
         contactFormUrl, 
-        formAnalysis.contactForm
+        formAnalysis.contactForm,
+        page // Pass existing page
       );
 
       // Calculate processing time
@@ -245,11 +249,15 @@ class ContactFormProcessor {
       };
 
       await this.resultsManager.saveResult(result);
-
-      // Save to process tracker
       await this.processTracker.saveProcessedCompany(company.id, 'ERROR', result.homepage);
 
       return result;
+    } finally {
+      // Close the single page after entire workflow
+      if (page) {
+        await page.close().catch(() => {});
+        logger.info('Page closed after company processing');
+      }
     }
   }
 

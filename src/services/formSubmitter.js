@@ -18,16 +18,25 @@ class FormSubmitter {
 
   /**
    * Fill and submit a contact form
+   * @param {string} url - The URL to submit
+   * @param {Object} formData - The form data from analyzer
+   * @param {Page} existingPage - Optional existing page to reuse
    */
-  async submitForm(url, formData) {
-    let page;
+  async submitForm(url, formData, existingPage = null) {
+    let page = existingPage;
+    const shouldClosePage = !existingPage; // Only close if we created it
+    
     try {
       logger.info(`Submitting form at: ${url}`);
-      page = await this.browser.newPage();
       
-      // Set viewport and user agent
-      await page.setViewport({ width: 1920, height: 1080 });
-      await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+      // Create new page only if one wasn't provided
+      if (!page) {
+        page = await this.browser.newPage();
+        
+        // Set viewport and user agent
+        await page.setViewport({ width: 1920, height: 1080 });
+        await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+      }
       
       await page.goto(url, {
         waitUntil: 'networkidle2',
@@ -41,7 +50,6 @@ class FormSubmitter {
       const fillResults = await this.fillFormFields(page, formData);
       
       if (!fillResults.success) {
-        await page.close();
         return {
           success: false,
           error: 'Failed to fill form fields',
@@ -63,7 +71,6 @@ class FormSubmitter {
       const hasCaptcha = await this.detectCaptcha(page);
       if (hasCaptcha) {
         logger.warn('CAPTCHA detected, cannot auto-submit', { url });
-        await page.close();
         return {
           success: false,
           error: 'CAPTCHA detected',
@@ -76,7 +83,6 @@ class FormSubmitter {
       const submitResult = await this.clickSubmitButton(page, formData);
       
       if (!submitResult.success) {
-        await page.close();
         return {
           success: false,
           error: submitResult.error,
@@ -92,9 +98,6 @@ class FormSubmitter {
       
       // Detect success indicators
       const successDetected = this.detectSuccessResponse(pageContent, finalUrl, url);
-      
-      await page.close();
-      page = null;
 
       logger.info('Form submission completed', { 
         url,
@@ -123,7 +126,8 @@ class FormSubmitter {
         error: error.message
       };
     } finally {
-      if (page) {
+      // Only close page if we created it (not passed in)
+      if (page && shouldClosePage) {
         await page.close().catch(() => {});
       }
     }
