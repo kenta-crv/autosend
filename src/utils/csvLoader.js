@@ -2,6 +2,7 @@ const fs = require('fs');
 const csv = require('csv-parser');
 const logger = require('../config/logger');
 const Blacklist = require('../config/blacklist');
+const ProcessTracker = require('../utils/processTracker');
 
 class CsvLoader {
   /**
@@ -40,9 +41,14 @@ class CsvLoader {
    * Expected columns: id, company, tel, address, url, url_2, title, industry, genre, contact_url
    */
   static async loadFromCsv(filepath) {
-    return new Promise((resolve, reject) => {
+    return new Promise(async (resolve, reject) => {
       const companies = [];
       const errors = [];
+      const skipped = [];
+      
+      // Initialize process tracker
+      const processTracker = new ProcessTracker();
+      await processTracker.load();
       
       logger.info(`Loading companies from CSV: ${filepath}`);
       
@@ -55,6 +61,15 @@ class CsvLoader {
               errors.push({
                 row,
                 error: 'Missing required fields: id or company'
+              });
+              return;
+            }
+
+            // Skip if already processed
+            if (processTracker.checkIfProcessed(row.id)) {
+              skipped.push({
+                id: row.id,
+                company: row.company
               });
               return;
             }
@@ -126,13 +141,17 @@ class CsvLoader {
         .on('end', () => {
           logger.info(`CSV loaded: ${companies.length} companies`);
           
+          if (skipped.length > 0) {
+            logger.info(`Skipped ${skipped.length} already processed companies`);
+          }
+          
           if (errors.length > 0) {
             logger.warn(`CSV loading errors: ${errors.length} rows skipped`, { 
               errors: errors.slice(0, 5) // Log first 5 errors
             });
           }
           
-          resolve({ companies, errors });
+          resolve({ companies, errors, skipped });
         })
         .on('error', (error) => {
           logger.error('Error reading CSV file:', { error: error.message });
@@ -151,12 +170,10 @@ class CsvLoader {
       errors.push('Missing id');
     }
     
-    if (!company.name) {
-      errors.push('Missing name');
-    }
     
-    if (!company.homepage && !company.contact_form_url) {
-      errors.push('Must have either homepage or contact_form_url');
+    
+    if (!company.name && !company.homepage && !company.contact_form_url) {
+      errors.push('Must have either Name, homepage or contact_form_url');
     }
     
     return {

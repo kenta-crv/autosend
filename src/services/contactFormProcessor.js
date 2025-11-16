@@ -5,12 +5,14 @@ const FormAnalyzer = require('./formAnalyzer');
 const FormSubmitter = require('./formSubmitter');
 const UrlDetector = require('../utils/urlDetector');
 const ResultsManager = require('../utils/resultsManager');
+const ProcessTracker = require('../utils/processTracker');
 
 class ContactFormProcessor {
   constructor() {
     this.browser = null;
     this.urlDetector = null;
     this.resultsManager = new ResultsManager();
+    this.processTracker = new ProcessTracker();
   }
 
   /**
@@ -41,6 +43,9 @@ class ContactFormProcessor {
       // Initialize URL detector with browser instance for enhanced detection
       this.urlDetector = new UrlDetector(this.browser);
       logger.info('URL detector initialized with Puppeteer support');
+
+      // Load processed companies
+      await this.processTracker.load();
 
     } catch (error) {
       logger.error('Failed to initialize browser:', { 
@@ -173,6 +178,9 @@ class ContactFormProcessor {
       // Save result
       await this.resultsManager.saveResult(result);
 
+      // Save to process tracker
+await this.processTracker.saveProcessedCompany(company.id, result.status, result.homepage);
+
       return result;
 
     } catch (error) {
@@ -195,6 +203,9 @@ class ContactFormProcessor {
       };
 
       await this.resultsManager.saveResult(result);
+
+      // Save to process tracker
+await this.processTracker.saveProcessedCompany(company.id, 'ERROR', result.homepage);
 
       return result;
     }

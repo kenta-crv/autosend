@@ -149,13 +149,13 @@ class ResultsManager {
       logger.info('FINAL REPORT GENERATED');
       logger.info('='.repeat(70));
       logger.info(`JSON Report: ${jsonFilepath}`);
-      logger.info(`Text Summary: ${textFilepath}`);
+      
       logger.info('='.repeat(70));
       
       // Log statistics
       this.logStatistics(stats);
 
-      return { jsonFilepath, textFilepath, stats };
+      return { jsonFilepath, stats };
 
     } catch (error) {
       logger.error('Failed to generate report:', { error: error.message });

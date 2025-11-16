@@ -4,22 +4,15 @@
  */
 
 const BLACKLISTED_DOMAINS = [
-  'indeed.com',
+ 
   'jp.indeed.com',
-  'linkedin.com',
-  'facebook.com',
-  'twitter.com',
-  'instagram.com',
-  'youtube.com',
+ 
   // Add more domains as needed
 ];
 
 const BLACKLISTED_PATTERNS = [
   /indeed\.com/i,
-  /linkedin\.com/i,
-  /facebook\.com/i,
-  /twitter\.com/i,
-  /instagram\.com/i,
+ 
   // Add regex patterns for more complex matching
 ];
 
@@ -49,14 +42,14 @@ class Blacklist {
       }
 
       // Check pattern matches
-      for (const pattern of BLACKLISTED_PATTERNS) {
-        if (pattern.test(url)) {
-          return {
-            isBlacklisted: true,
-            reason: `URL matches blacklisted pattern: ${pattern}`
-          };
-        }
-      }
+      // for (const pattern of BLACKLISTED_PATTERNS) {
+      //   if (pattern.test(url)) {
+      //     return {
+      //       isBlacklisted: true,
+      //       reason: `URL matches blacklisted pattern: ${pattern}`
+      //     };
+      //   }
+      // }
 
       return { isBlacklisted: false, reason: null };
     } catch (error) {

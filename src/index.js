@@ -76,22 +76,22 @@ Examples:
         companies = [
           {
             id: 1,
-            name: 'Wp-Beginner',
-            homepage: '',
+            name: 'zoomdesign',
+            homepage: 'http://www.zoomdesign.co.jp/contact.html',
             contact_form_url: null
           },
-          {
-            id: 2,
-            name: 'BlogTyrant',
-            homepage: 'https://www.blogtyrant.com/',
-            contact_form_url: null
-          },
-          {
-            id: 3,
-            name: 'Tech Insider Talk',
-            homepage: 'https://techinsidertalk.com/',
-            contact_form_url: null
-          }
+          // {
+          //   id: 2,
+          //   name: 'BlogTyrant',
+          //   homepage: 'https://www.blogtyrant.com/',
+          //   contact_form_url: null
+          // },
+          // {
+          //   id: 3,
+          //   name: 'Tech Insider Talk',
+          //   homepage: 'https://techinsidertalk.com/',
+          //   contact_form_url: null
+          // }
         ];
         
         await processDirect(companies);
