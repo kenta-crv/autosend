@@ -148,17 +148,17 @@ class ContactPageFinder {
     try {
       logger.info(`Finding contact page for: ${homepage}`);
 
-      // Method 1: Try direct URLs (faster)
-      const directResult = await this.findByDirectUrl(homepage);
-      if (directResult) {
-        return directResult;
+      // Method 1: Analyze homepage links (primary method)
+      const linkResult = await this.findByHomepageLinks(homepage);
+      if (linkResult) {
+        return linkResult;
       }
 
-      // Method 2: Analyze homepage links (fallback)
-      logger.info('Direct URL method failed, trying homepage link analysis...');
-      const linkResult = await this.findByHomepageLinks(homepage);
+      // Method 2: Try direct URLs (fallback)
+      logger.info('Homepage link analysis failed, trying direct URL method...');
+      const directResult = await this.findByDirectUrl(homepage);
       
-      return linkResult;
+      return directResult;
 
     } catch (error) {
       logger.error('Error finding contact page:', { 

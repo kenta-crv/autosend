@@ -81,21 +81,29 @@ class ContactFormProcessor {
     logger.info('='.repeat(70));
 
     try {
-      // Step 1: Determine homepage URL
-      let homepage = company.homepage;
+      // Step 1: Determine homepage URL with priority: contact_url -> url_2 -> url -> detect
+      let homepage = null;
       
-      if (!homepage) {
-        logger.info('No homepage provided, attempting to detect...');
+      if (company.contact_url) {
+        homepage = UrlDetector.normalizeUrl(company.contact_url);
+        logger.info(`Using contact_url as homepage: ${homepage}`);
+      } else if (company.url_2) {
+        homepage = UrlDetector.normalizeUrl(company.url_2);
+        logger.info(`Using url_2 as homepage: ${homepage}`);
+      } else if (company.url) {
+        homepage = UrlDetector.normalizeUrl(company.url);
+        logger.info(`Using url as homepage: ${homepage}`);
+      } else {
+        logger.info('No URLs provided, attempting to detect website...');
         homepage = await this.urlDetector.detectWebsite(company.name);
         
         if (!homepage) {
           throw new Error('Could not detect company website');
         }
+        logger.info(`Detected homepage: ${homepage}`);
       }
 
-      // Normalize URL
-      homepage = UrlDetector.normalizeUrl(homepage);
-      logger.info(`Homepage: ${homepage}`);
+      logger.info(`Final homepage: ${homepage}`);
 
       // Step 2: Determine contact form URL
       let contactFormUrl = company.contact_form_url;
@@ -119,7 +127,24 @@ class ContactFormProcessor {
         contactFormUrl = await finder.findContactPage(homepage);
         
         if (!contactFormUrl) {
-          throw new Error('Could not find contact page');
+          // Return SKIPPED status instead of throwing error
+          const processingTime = Date.now() - startTime;
+          const result = {
+            id: company.id,
+            name: company.name,
+            homepage: homepage,
+            contact_form_url: null,
+            status: 'SKIPPED',
+            message: 'Could not find contact page',
+            processing_time_ms: processingTime,
+            timestamp: new Date().toISOString()
+          };
+
+          logger.warn(`Skipping company ${company.name}: Contact page not found`);
+          await this.resultsManager.saveResult(result);
+          await this.processTracker.saveProcessedCompany(company.id, 'SKIPPED', homepage);
+          
+          return result;
         }
       }
 
@@ -131,7 +156,24 @@ class ContactFormProcessor {
       const formAnalysis = await analyzer.analyzeForm(contactFormUrl);
       
       if (!formAnalysis.contactForm) {
-        throw new Error('No suitable contact form found on page');
+        // Return SKIPPED status for no suitable form
+        const processingTime = Date.now() - startTime;
+        const result = {
+          id: company.id,
+          name: company.name,
+          homepage: homepage,
+          contact_form_url: contactFormUrl,
+          status: 'SKIPPED',
+          message: 'No suitable contact form found on page',
+          processing_time_ms: processingTime,
+          timestamp: new Date().toISOString()
+        };
+
+        logger.warn(`Skipping company ${company.name}: No suitable contact form found`);
+        await this.resultsManager.saveResult(result);
+        await this.processTracker.saveProcessedCompany(company.id, 'SKIPPED', homepage);
+        
+        return result;
       }
 
       logger.info(`Found contact form with ${formAnalysis.contactForm.inputs.length} fields`);
@@ -179,7 +221,7 @@ class ContactFormProcessor {
       await this.resultsManager.saveResult(result);
 
       // Save to process tracker
-await this.processTracker.saveProcessedCompany(company.id, result.status, result.homepage);
+      await this.processTracker.saveProcessedCompany(company.id, result.status, result.homepage);
 
       return result;
 
@@ -194,7 +236,7 @@ await this.processTracker.saveProcessedCompany(company.id, result.status, result
       const result = {
         id: company.id,
         name: company.name,
-        homepage: company.homepage || null,
+        homepage: company.contact_url || company.url_2 || company.url || null,
         contact_form_url: null,
         status: 'ERROR',
         error: error.message,
@@ -205,7 +247,7 @@ await this.processTracker.saveProcessedCompany(company.id, result.status, result
       await this.resultsManager.saveResult(result);
 
       // Save to process tracker
-await this.processTracker.saveProcessedCompany(company.id, 'ERROR', result.homepage);
+      await this.processTracker.saveProcessedCompany(company.id, 'ERROR', result.homepage);
 
       return result;
     }

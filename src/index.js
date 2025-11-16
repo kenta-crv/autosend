@@ -76,9 +76,9 @@ Examples:
         companies = [
           {
             id: 1,
-            name: 'zoomdesign',
-            homepage: 'http://www.zoomdesign.co.jp/contact.html',
-            contact_form_url: null
+            name: 'yyengine',
+            homepage: 'https://yyengine.jp/contact/',
+            contact_url: "https://yyengine.jp/contact/"
           },
           // {
           //   id: 2,

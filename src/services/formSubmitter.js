@@ -53,6 +53,9 @@ class FormSubmitter {
         filledCount: fillResults.filledCount 
       });
 
+      // Check and handle acceptance checkboxes BEFORE submitting
+      await this.handleAcceptanceCheckboxes(page);
+
       // Wait a bit for any validation
       await page.waitForTimeout(1000);
 
@@ -123,6 +126,47 @@ class FormSubmitter {
       if (page) {
         await page.close().catch(() => {});
       }
+    }
+  }
+
+  /**
+   * Handle acceptance/agreement checkboxes
+   */
+  async handleAcceptanceCheckboxes(page) {
+    try {
+      const checkboxesChecked = await page.evaluate(() => {
+        let checkedCount = 0;
+        
+        // Find ALL checkboxes on the page
+        const checkboxes = document.querySelectorAll('input[type="checkbox"]');
+        
+        checkboxes.forEach(checkbox => {
+          if (!checkbox.checked && !checkbox.disabled) {
+            checkbox.checked = true;
+            checkbox.click(); // Trigger click event
+            
+            // Dispatch events to ensure form validation updates
+            checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+            checkbox.dispatchEvent(new Event('input', { bubbles: true }));
+            checkbox.dispatchEvent(new Event('click', { bubbles: true }));
+            
+            checkedCount++;
+          }
+        });
+        
+        return checkedCount;
+      });
+
+      if (checkboxesChecked > 0) {
+        logger.info(`Checked ${checkboxesChecked} checkbox(es)`);
+        // Wait a moment for form validation to process
+        await page.waitForTimeout(500);
+      }
+
+      return checkboxesChecked;
+    } catch (error) {
+      logger.warn('Error handling checkboxes:', { error: error.message });
+      return 0;
     }
   }
 
@@ -317,12 +361,22 @@ class FormSubmitter {
         return { success: false, error: 'No submit button found' };
       }
 
+      // Check if submit button is still disabled
+      const isDisabled = await page.evaluate(() => {
+        const submitBtn = document.querySelector('input[type="submit"], button[type="submit"]');
+        return submitBtn ? submitBtn.disabled : false;
+      });
+
+      if (isDisabled) {
+        logger.warn('Submit button is still disabled - may need additional validation');
+      }
+
       // Try to click the submit button
       const clicked = await page.evaluate((btnInfo) => {
         // Try by ID first
         if (btnInfo.id) {
           const btn = document.getElementById(btnInfo.id);
-          if (btn) {
+          if (btn && !btn.disabled) {
             btn.click();
             return true;
           }
@@ -331,8 +385,10 @@ class FormSubmitter {
         // Try by button text
         const buttons = document.querySelectorAll('button[type="submit"], input[type="submit"], button');
         for (const btn of buttons) {
+          if (btn.disabled) continue;
+          
           const text = btn.textContent.toLowerCase() || btn.value.toLowerCase();
-          if (text.includes('submit') || text.includes('send') || text.includes('contact')) {
+          if (text.includes('submit') || text.includes('send') || text.includes('contact') || text.includes('送信')) {
             btn.click();
             return true;
           }

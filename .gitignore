@@ -19,7 +19,7 @@ yarn-error.log*
 results/
 *.csv
 *.json
-
+src/test/
 # IDE
 .vscode/
 .idea/
