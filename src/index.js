@@ -78,7 +78,7 @@ Examples:
             id: 1,
             name: 'yyengine',
             homepage: 'https://yyengine.jp/contact/',
-            contact_url: "https://yyengine.jp/contact/"
+            contact_url: "https://www.yumemi.co.jp/contacts"
           },
           // {
           //   id: 2,

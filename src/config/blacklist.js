@@ -5,7 +5,7 @@
 
 const BLACKLISTED_DOMAINS = [
  
-  'jp.indeed.com',
+  
  
   // Add more domains as needed
 ];

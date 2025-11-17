@@ -66,6 +66,7 @@ class ResultsManager {
    * Generate message based on result
    */
   generateMessage(result) {
+    logger.info('Generating message for result:', { result });
     if (result.status === 'SUCCESS') {
       if (result.submission?.successDetected) {
         return 'Form submitted successfully and success message detected';
@@ -84,7 +85,7 @@ class ResultsManager {
       return result.error || 'Processing error occurred';
     }
     
-    return 'Unknown status';
+    return result.message || 'No additional information';
   }
 
   /**
@@ -137,7 +138,7 @@ class ResultsManager {
       // Save JSON report (same as batch file if using in-memory results)
       const jsonFilename = `report_${timestamp}.json`;
       const jsonFilepath = path.join(this.resultsDir, jsonFilename);
-      await fs.writeFile(jsonFilepath, JSON.stringify(report, null, 2));
+      //await fs.writeFile(jsonFilepath, JSON.stringify(report, null, 2));
 
       // Save text summary
       // const textFilename = `summary_${timestamp}.txt`;
@@ -148,7 +149,7 @@ class ResultsManager {
       logger.info('=' .repeat(70));
       logger.info('FINAL REPORT GENERATED');
       logger.info('='.repeat(70));
-      logger.info(`JSON Report: ${jsonFilepath}`);
+     // logger.info(`JSON Report: ${jsonFilepath}`);
       
       logger.info('='.repeat(70));
       

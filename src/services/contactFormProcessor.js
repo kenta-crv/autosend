@@ -93,9 +93,7 @@ class ContactFormProcessor {
       if (company.contact_url) {
         homepage = UrlDetector.normalizeUrl(company.contact_url);
         logger.info(`Using contact_url as homepage: ${homepage}`);
-      } else if (company.url_2) {
-        homepage = UrlDetector.normalizeUrl(company.url_2);
-        logger.info(`Using url_2 as homepage: ${homepage}`);
+      
       } else if (company.url) {
         homepage = UrlDetector.normalizeUrl(company.url);
         logger.info(`Using url as homepage: ${homepage}`);
@@ -112,7 +110,7 @@ class ContactFormProcessor {
       logger.info(`Final homepage: ${homepage}`);
 
       // Step 2: Determine contact form URL
-      let contactFormUrl = company.contact_form_url;
+      let contactFormUrl = homepage;
       
       if (contactFormUrl) {
         logger.info('Contact form URL provided, validating...');

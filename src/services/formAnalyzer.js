@@ -12,16 +12,13 @@ class FormAnalyzer {
    */
   async analyzeForm(url, existingPage = null) {
     let page = existingPage;
-    const shouldClosePage = !existingPage; // Only close if we created it
+    const shouldClosePage = !existingPage;
     
     try {
       logger.info(`Analyzing form at: ${url}`);
       
-      // Create new page only if one wasn't provided
       if (!page) {
         page = await this.browser.newPage();
-        
-        // Set viewport and user agent
         await page.setViewport({ width: 1920, height: 1080 });
         await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
       }
@@ -31,8 +28,15 @@ class FormAnalyzer {
         timeout: 30000
       });
 
-      // Wait for potential dynamic forms to load
-      await page.waitForTimeout(2000);
+      // Wait for forms to load
+      try {
+        await page.waitForSelector('form', { timeout: 5000 });
+      } catch (e) {
+        logger.warn('No forms found in DOM', { url });
+      }
+
+      // Extended wait for dynamic content
+      await page.waitForTimeout(3000);
 
       // Extract form information
       const formData = await page.evaluate(() => {
@@ -49,11 +53,32 @@ class FormAnalyzer {
               return;
             }
             
-            // Check if element is visible
+            // Enhanced visibility check
             const rect = el.getBoundingClientRect();
-            const isVisible = rect.width > 0 && rect.height > 0 && 
-                            window.getComputedStyle(el).visibility !== 'hidden' &&
-                            window.getComputedStyle(el).display !== 'none';
+            const computedStyle = window.getComputedStyle(el);
+            
+            let isVisible = rect.width > 0 && rect.height > 0;
+            
+            if (isVisible) {
+              isVisible = computedStyle.visibility !== 'hidden' && 
+                         computedStyle.display !== 'none' &&
+                         computedStyle.opacity !== '0';
+            }
+            
+            // Check parent visibility
+            if (isVisible) {
+              let parent = el.parentElement;
+              let depth = 0;
+              while (parent && parent !== form && depth < 10) {
+                const parentStyle = window.getComputedStyle(parent);
+                if (parentStyle.display === 'none' || parentStyle.visibility === 'hidden') {
+                  isVisible = false;
+                  break;
+                }
+                parent = parent.parentElement;
+                depth++;
+              }
+            }
             
             if (!isVisible) return;
             
@@ -89,7 +114,10 @@ class FormAnalyzer {
           const buttons = form.querySelectorAll('button[type="submit"], input[type="submit"], button:not([type])');
           buttons.forEach(btn => {
             const rect = btn.getBoundingClientRect();
-            const isVisible = rect.width > 0 && rect.height > 0;
+            const computedStyle = window.getComputedStyle(btn);
+            const isVisible = rect.width > 0 && rect.height > 0 && 
+                            computedStyle.display !== 'none' &&
+                            computedStyle.visibility !== 'hidden';
             
             if (isVisible) {
               submitButtons.push({
@@ -115,20 +143,49 @@ class FormAnalyzer {
         return forms;
       });
 
+      logger.info(`Extracted ${formData.length} forms`, {
+        forms: formData.map(f => ({
+          index: f.index,
+          inputCount: f.inputs.length,
+          buttonCount: f.submitButtons.length
+        }))
+      });
+
       // Analyze and categorize forms
       const analyzedForms = formData.map(form => this.categorizeForm(form));
       
-      // Find the best form (likely to be contact form)
+      // Log all forms with their details
+      analyzedForms.forEach((form, idx) => {
+        logger.info(`Form ${idx}:`, {
+          index: form.index,
+          score: form.score,
+          inputCount: form.inputs.length,
+          fieldTypes: form.inputs.map(i => i.fieldType),
+          submitButtons: form.submitButtons.length,
+          submitButtonTexts: form.submitButtons.map(b => b.text)
+        });
+      });
+
+      // Find the best form
       const contactForm = this.findBestContactForm(analyzedForms);
       
       if (contactForm) {
         logger.info(`Found contact form with ${contactForm.inputs.length} fields`, {
           url,
           formIndex: contactForm.index,
-          inputCount: contactForm.inputs.length
+          inputCount: contactForm.inputs.length,
+          score: contactForm.score
         });
       } else {
-        logger.warn('No suitable contact form found', { url });
+        logger.warn('No suitable contact form found', { 
+          url,
+          totalForms: formData.length,
+          formScores: analyzedForms.map(f => ({
+            index: f.index,
+            score: f.score,
+            inputs: f.inputs.length
+          }))
+        });
       }
 
       return {
@@ -150,7 +207,6 @@ class FormAnalyzer {
         error: error.message
       };
     } finally {
-      // Only close page if we created it (not passed in)
       if (page && shouldClosePage) {
         await page.close().catch(() => {});
       }
@@ -180,43 +236,57 @@ class FormAnalyzer {
     const searchStr = `${input.name} ${input.id} ${input.placeholder} ${input.label} ${input.className} ${input.autocomplete}`.toLowerCase();
     
     // Email field
-    if (input.type === 'email' || searchStr.match(/email|e-mail|mail/)) {
+    if (input.type === 'email' || searchStr.match(/email|e-mail|mail|メール|メールアドレス/)) {
       return 'email';
     }
     
     // Phone field
-    if (input.type === 'tel' || searchStr.match(/phone|tel|mobile|contact.*number/)) {
+    if (input.type === 'tel' || searchStr.match(/phone|tel|mobile|contact.*number|電話|携帯|電話番号/)) {
       return 'phone';
     }
     
-    // Name fields
-    if (searchStr.match(/^name$|full.*name|your.*name|contact.*name/)) {
+    // Name fields (full name)
+    if (searchStr.match(/^name$|full.*name|your.*name|contact.*name|氏名|名前|fullname/)) {
       return 'fullname';
     }
-    if (searchStr.match(/first.*name|fname|given.*name/)) {
+    
+    // First name
+    if (searchStr.match(/first.*name|fname|given.*name|first_name|first-name|first_kana/)) {
       return 'firstname';
     }
-    if (searchStr.match(/last.*name|lname|surname|family.*name/)) {
+    
+    // Last name
+    if (searchStr.match(/last.*name|lname|surname|family.*name|last_name|last-name|last_kana/)) {
       return 'lastname';
     }
     
     // Company/Organization
-    if (searchStr.match(/company|organization|organisation|business/)) {
+    if (searchStr.match(/company|organization|organisation|business|会社|企業|会社名|corporation/)) {
       return 'company';
     }
     
+    // Department
+    if (searchStr.match(/department|dept|部署|department_name|部門|部署名/)) {
+      return 'department';
+    }
+    
+    // Job title
+    if (searchStr.match(/job.*title|title|position|role|職|役職|job_title|職種|役職名/)) {
+      return 'jobtitle';
+    }
+    
     // Website/URL
-    if (input.type === 'url' || searchStr.match(/website|url|site/)) {
+    if (input.type === 'url' || searchStr.match(/website|url|site|ウェブサイト|web_site|homepage|url|会社url/)) {
       return 'website';
     }
     
-    // Message/Comment
-    if (input.tagName === 'textarea' || searchStr.match(/message|comment|inquiry|enquiry|details|description|question/)) {
+    // Message/Comment (textarea or message-like fields)
+    if (input.tagName === 'textarea' || searchStr.match(/message|comment|inquiry|enquiry|details|description|question|お問い合わせ|内容|詳細|メッセージ|description|comments|body|content/)) {
       return 'message';
     }
     
     // Subject
-    if (searchStr.match(/subject|topic|regarding/)) {
+    if (searchStr.match(/subject|topic|regarding|件名|タイトル|subject_line/)) {
       return 'subject';
     }
     
@@ -234,26 +304,41 @@ class FormAnalyzer {
     const hasEmail = inputs.some(i => i.fieldType === 'email');
     const hasMessage = inputs.some(i => i.fieldType === 'message');
     const hasName = inputs.some(i => ['fullname', 'firstname', 'lastname'].includes(i.fieldType));
+    const hasCompany = inputs.some(i => i.fieldType === 'company');
     
-    if (hasEmail) score += 30;
-    if (hasMessage) score += 25;
-    if (hasName) score += 20;
+    if (hasEmail) {
+      score += 40;
+    }
     
-    // Reasonable number of fields (3-15 is typical for contact forms)
-    if (inputs.length >= 3 && inputs.length <= 15) {
+    if (hasMessage) {
+      score += 35;
+    }
+    
+    if (hasName) {
+      score += 20;
+    }
+    
+    if (hasCompany) {
+      score += 10;
+    }
+    
+    // Reasonable number of fields (2-25 is typical for contact forms)
+    if (inputs.length >= 2 && inputs.length <= 25) {
       score += 15;
-    } else if (inputs.length > 15) {
-      score -= 10; // Probably not a simple contact form
+    } else if (inputs.length > 25) {
+      score -= 15;
+    } else if (inputs.length < 2) {
+      score -= 20;
     }
     
     // Has submit button
     if (submitButtons.length > 0) {
-      score += 10;
+      score += 15;
       
       // Check submit button text
       const btnText = submitButtons[0].text.toLowerCase();
-      if (btnText.match(/submit|send|contact|inquire|enquire/)) {
-        score += 5;
+      if (btnText.match(/submit|send|contact|inquire|enquire|送信|送る|申込|お問い合わせ|確認|次へ/)) {
+        score += 10;
       }
     }
     
@@ -264,16 +349,47 @@ class FormAnalyzer {
    * Find the most likely contact form
    */
   findBestContactForm(forms) {
-    if (forms.length === 0) return null;
+    if (forms.length === 0) {
+      logger.warn('No forms to evaluate');
+      return null;
+    }
     
     // Sort by score
     forms.sort((a, b) => b.score - a.score);
     
-    // Return form with highest score if it's above threshold
-    if (forms[0].score >= 40) {
-      return forms[0];
+    const topForm = forms[0];
+    logger.info(`Top form has score: ${topForm.score}`, {
+      formIndex: topForm.index,
+      inputCount: topForm.inputs.length,
+      hasEmail: topForm.inputs.some(i => i.fieldType === 'email'),
+      hasMessage: topForm.inputs.some(i => i.fieldType === 'message'),
+      hasName: topForm.inputs.some(i => ['fullname', 'firstname', 'lastname'].includes(i.fieldType)),
+      submitButtons: topForm.submitButtons.length
+    });
+    
+    // Check if top form meets threshold
+    if (topForm.score >= 30) {
+      logger.info(`Form meets threshold (score: ${topForm.score})`);
+      return topForm;
     }
     
+    // Fallback: If form has email + message + submit button, accept it anyway
+    const fallback = forms.find(form => {
+      const hasEmail = form.inputs.some(i => i.fieldType === 'email');
+      const hasMessage = form.inputs.some(i => i.fieldType === 'message');
+      const hasSubmit = form.submitButtons.length > 0;
+      return hasEmail && hasMessage && hasSubmit;
+    });
+    
+    if (fallback) {
+      logger.info('Using fallback form: has email + message + submit button', {
+        score: fallback.score,
+        formIndex: fallback.index
+      });
+      return fallback;
+    }
+    
+    logger.warn(`No form meets criteria. Top form score: ${topForm.score}`);
     return null;
   }
 }
