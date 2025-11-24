@@ -1,12 +1,14 @@
 const fs = require('fs').promises;
 const path = require('path');
 const logger = require('../config/logger');
+const DatabaseLogger = require('./logToDb');
 
 class ResultsManager {
   constructor() {
     this.resultsDir = process.env.RESULTS_OUTPUT_PATH || './results';
     this.results = []; // Store all results in memory
     this.currentBatchFile = null;
+    this.dbLogger = new DatabaseLogger();
     this.ensureResultsDirectory();
   }
 
@@ -52,8 +54,10 @@ class ResultsManager {
         this.currentBatchFile, 
         JSON.stringify(this.results, null, 2)
       );
-      
-      logger.debug(`Result saved to batch file: ${this.currentBatchFile}`);
+            // Log to database
+     await this.dbLogger.logResult(simplifiedResult);
+
+      logger.debug(`Result saved to batch file and database: ${this.currentBatchFile}`);
     } catch (error) {
       logger.error('Failed to save result:', { 
         companyId: result.id,

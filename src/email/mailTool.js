@@ -219,9 +219,9 @@ async function setupEmailListener() {
   }
 
   console.log('✅ POP3 Email Listener Started');
-  console.log('📧 Email:', mailConfig.email);
-  console.log('🔗 Server:', mailConfig.pop3Host);
-  console.log('🔌 Port:', mailConfig.pop3Port);
+  // console.log('📧 Email:', mailConfig.email);
+  // console.log('🔗 Server:', mailConfig.pop3Host);
+  // console.log('🔌 Port:', mailConfig.pop3Port);
   
   // Initialize baseline - get current email count without processing
   try {
@@ -236,8 +236,7 @@ async function setupEmailListener() {
     console.error('❌ Failed to get initial email count:', err.message);
   }
   
-  console.log('\n🎯 Checking for emails every 30 seconds...');
-  console.log('💡 Send an email to mail@ebisu-hotel.tokyo and it will appear here!\n');
+
 
   // Check every 30 seconds (don't check immediately)
   setInterval(checkEmails, 30000);
