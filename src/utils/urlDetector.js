@@ -77,21 +77,30 @@ class UrlDetector {
    * Normalize URL (ensure proper format)
    */
   static normalizeUrl(url) {
-    if (!url) return null;
-    
-    // Add protocol if missing
-    if (!url.startsWith('http://') && !url.startsWith('https://')) {
-      url = 'https://' + url;
-    }
-    
-    try {
-      const urlObj = new URL(url);
-      return urlObj.href;
-    } catch (error) {
-      logger.error(`Cannot normalize URL: ${url}`, { error: error.message });
-      return null;
-    }
+  if (!url) return null;
+  
+  // Trim whitespace
+  url = url.trim();
+  
+  // Extract URL from parentheses if present (e.g., "ãƒ†ãƒ« (teruyadenki.co.jp)" -> "teruyadenki.co.jp")
+  const match = url.match(/\(([^)]+)\)/);
+  if (match) {
+    url = match[1].trim();
   }
+  
+  // Add protocol if missing
+  if (!url.startsWith('http://') && !url.startsWith('https://')) {
+    url = 'https://' + url;
+  }
+  
+  try {
+    const urlObj = new URL(url);
+    return urlObj.href;
+  } catch (error) {
+    logger.error(`Cannot normalize URL: ${url}`, { error: error.message });
+    return null;
+  }
+}
 
   /**
    * Validate if a URL is accessible

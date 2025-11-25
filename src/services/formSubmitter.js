@@ -245,6 +245,20 @@ class FormSubmitter {
    */
   getValueForField(input) {
     const fieldType = input.fieldType || 'text';
+    const fieldName = (input.name || input.id || '').toLowerCase();
+    
+    // Map common field names to test data
+    if (fieldName.includes('email')) return this.testData.email;
+    if (fieldName.includes('phone') || fieldName.includes('telephone')) return this.testData.phone;
+    if (fieldName.includes('website') || fieldName.includes('url')) return this.testData.website;
+    if (fieldName.includes('first') || fieldName.includes('firstname')) return this.testData.firstname;
+    if (fieldName.includes('last') || fieldName.includes('lastname')) return this.testData.lastname;
+    if (fieldName.includes('name') && fieldName.includes('full')) return this.testData.fullname;
+    if (fieldName.includes('name')) return this.testData.fullname;
+    if (fieldName.includes('company') || fieldName.includes('organisation') || fieldName.includes('organization')) return this.testData.company;
+    if (fieldName.includes('subject') || fieldName.includes('title')) return this.testData.subject;
+    
+    // Fallback based on fieldType
     return this.testData[fieldType] || this.testData.message;
   }
 
@@ -343,8 +357,9 @@ class FormSubmitter {
         const recaptcha = document.querySelector('.g-recaptcha, [data-sitekey], .recaptcha');
         const hcaptcha = document.querySelector('.h-captcha');
         const turnstile = document.querySelector('.cf-turnstile');
+        const cloudflare = document.querySelector('iframe[src*="challenges.cloudflare"]');
         
-        return !!(recaptcha || hcaptcha || turnstile);
+        return !!(recaptcha || hcaptcha || turnstile || cloudflare);
       });
 
       return hasCaptcha;
@@ -354,7 +369,7 @@ class FormSubmitter {
   }
 
   /**
-   * Click submit button
+   * Click submit button with multi-language support
    */
   async clickSubmitButton(page, formData) {
     try {
@@ -377,7 +392,39 @@ class FormSubmitter {
 
       // Try to click the submit button
       const clicked = await page.evaluate((btnInfo) => {
-        // Try by ID first
+        // Multi-language submit button keywords
+        const submitKeywords = [
+          // English
+          'submit', 'send', 'contact', 'post', 'ok', 'confirm', 'go',
+          // Hebrew
+          'שלח', 'שליחה', 'שלוח',
+          // Japanese
+          '送信', '送る', 'submit',
+          // Spanish
+          'enviar', 'envio',
+          // French
+          'envoyer', 'soumettre',
+          // German
+          'senden', 'absenden', 'abschicken',
+          // Italian
+          'inviare', 'spedire',
+          // Portuguese
+          'enviar', 'submeter',
+          // Arabic
+          'إرسال', 'أرسل',
+          // Korean
+          '보내기', '제출', '전송',
+          // Chinese
+          '发送', '提交', '送出',
+          // Dutch
+          'verzenden', 'versturen',
+          // Swedish
+          'skicka', 'skapa',
+          // Polish
+          'wyślij', 'prześlij'
+        ];
+
+        // Strategy 1: Try by ID first
         if (btnInfo.id) {
           const btn = document.getElementById(btnInfo.id);
           if (btn && !btn.disabled) {
@@ -386,13 +433,53 @@ class FormSubmitter {
           }
         }
 
-        // Try by button text
-        const buttons = document.querySelectorAll('button[type="submit"], input[type="submit"], button');
-        for (const btn of buttons) {
+        // Strategy 2: Try input[type="submit"]
+        const submitInputs = document.querySelectorAll('input[type="submit"]');
+        for (const btn of submitInputs) {
           if (btn.disabled) continue;
           
-          const text = btn.textContent.toLowerCase() || btn.value.toLowerCase();
-          if (text.includes('submit') || text.includes('send') || text.includes('contact') || text.includes('送信')) {
+          const value = (btn.value || '').trim();
+          const text = (btn.textContent || '').trim();
+          const searchText = (value || text).toLowerCase();
+          
+          // Check if button text matches any submit keyword
+          const isSubmitButton = submitKeywords.some(keyword => 
+            searchText.includes(keyword.toLowerCase())
+          );
+          
+          if (isSubmitButton) {
+            btn.click();
+            return true;
+          }
+        }
+
+        // Strategy 3: Try button[type="submit"]
+        const submitButtons = document.querySelectorAll('button[type="submit"]');
+        for (const btn of submitButtons) {
+          if (btn.disabled) continue;
+          
+          const text = (btn.textContent || '').trim().toLowerCase();
+          const isSubmitButton = submitKeywords.some(keyword => 
+            text.includes(keyword.toLowerCase())
+          );
+          
+          if (isSubmitButton) {
+            btn.click();
+            return true;
+          }
+        }
+
+        // Strategy 4: Try any button (fallback)
+        const allButtons = document.querySelectorAll('button, input[type="button"]');
+        for (const btn of allButtons) {
+          if (btn.disabled) continue;
+          
+          const text = (btn.textContent || btn.value || '').trim().toLowerCase();
+          const isSubmitButton = submitKeywords.some(keyword => 
+            text.includes(keyword.toLowerCase())
+          );
+          
+          if (isSubmitButton) {
             btn.click();
             return true;
           }
@@ -416,23 +503,31 @@ class FormSubmitter {
   }
 
   /**
-   * Detect success response
+   * Detect success response with multi-language support
    */
   detectSuccessResponse(pageContent, finalUrl, originalUrl) {
     const content = pageContent.toLowerCase();
     
-    // Check for success keywords
+    // Multi-language success indicators
     const successKeywords = [
-      'thank you',
-      'thanks for',
-      'message sent',
-      'successfully submitted',
-      'received your',
-      'we\'ll get back',
-      'we will get back',
-      'contact you soon',
-      'submission successful',
-      'form submitted'
+      // English
+      'thank you', 'thanks for', 'message sent', 'successfully submitted',
+      'received your', 'we\'ll get back', 'we will get back', 'contact you soon',
+      'submission successful', 'form submitted', 'success', 'confirmed',
+      // Hebrew
+      'תודה', 'תודה רבה', 'הודעה נשלחה', 'נשלח בהצלחה',
+      // Japanese
+      'ありがとう', 'ご送信', '送信完了', '送信されました', '完了',
+      // Spanish
+      'gracias', 'enviado', 'enviada', 'envío exitoso', 'confirmación',
+      // French
+      'merci', 'envoyé', 'succès', 'confirmation',
+      // German
+      'danke', 'gesendet', 'erfolgreich', 'bestätigung',
+      // Portuguese
+      'obrigado', 'enviado', 'sucesso', 'confirmação',
+      // Polish
+      'dziękuję', 'wysłane', 'sukces'
     ];
 
     const hasSuccessKeyword = successKeywords.some(keyword => content.includes(keyword));
@@ -440,10 +535,12 @@ class FormSubmitter {
     // Check if URL changed (often indicates successful submission)
     const urlChanged = finalUrl !== originalUrl;
     
-    // Check for thank you page
+    // Check for thank you page or success page indicators
     const isThankYouPage = finalUrl.includes('thank') || 
                           finalUrl.includes('success') || 
-                          finalUrl.includes('confirmation');
+                          finalUrl.includes('confirmation') ||
+                          finalUrl.includes('thanks') ||
+                          finalUrl.includes('submitted');
     
     return hasSuccessKeyword || isThankYouPage || urlChanged;
   }

@@ -35,7 +35,9 @@ class ContactFormProcessor {
         defaultViewport: {
           width: 1920,
           height: 1080
-        }
+        },
+        ignoreHTTPSErrors: true  // ADD THIS - Most important!
+
       });
 
       logger.info('Browser initialized successfully');
@@ -71,7 +73,7 @@ class ContactFormProcessor {
   }
 
   /**
-   * Process a single company - NOW WITH SINGLE PAGE REUSE
+   * Process a single company
    */
   async processCompany(company) {
     const startTime = Date.now();
@@ -89,16 +91,12 @@ class ContactFormProcessor {
 
       // Step 1: Determine homepage URL
       let homepage = null;
-      
-      if (company.contact_url) {
-        homepage = UrlDetector.normalizeUrl(company.contact_url);
-        logger.info(`Using contact_url as homepage: ${homepage}`);
-      
-      } else if (company.url) {
+      console.log("To process this company",company);
+      if (company.url) {
         homepage = UrlDetector.normalizeUrl(company.url);
         logger.info(`Using url as homepage: ${homepage}`);
       } else {
-        logger.info('No URLs provided, attempting to detect website...');
+        logger.info('No URL provided, attempting to detect website...');
         homepage = await this.urlDetector.detectWebsite(company.name);
         
         if (!homepage) {
@@ -109,23 +107,56 @@ class ContactFormProcessor {
 
       logger.info(`Final homepage: ${homepage}`);
 
-      // Step 2: Determine contact form URL
-      let contactFormUrl = homepage;
-      
-      if (contactFormUrl) {
-        logger.info('Contact form URL provided, validating...');
-        contactFormUrl = UrlDetector.normalizeUrl(contactFormUrl);
+         // ADD THIS: Test if homepage is accessible before proceeding
+    try {
+      const testResponse = await page.goto(homepage, {
+        waitUntil: 'domcontentloaded',
+        timeout: 15000
+      });
+
+      if (!testResponse || testResponse.status() === 0) {
+        throw new Error('Site unreachable - possible certificate error');
+      }
+    } catch (testError) {
+      if (testError.message.includes('ERR_CERT_') || 
+          testError.message.includes('SSL') || 
+          testError.message.includes('certificate')) {
         
-        const isValid = await this.urlDetector.validateUrl(contactFormUrl);
-        if (!isValid) {
-          logger.warn('Provided contact form URL is invalid, searching...');
-          contactFormUrl = null;
-        }
+        const processingTime = Date.now() - startTime;
+        const result = {
+          id: company.id,
+          name: company.name,
+          homepage: homepage,
+          contact_form_url: null,
+          status: 'SKIPPED',
+          message: 'SSL/Certificate error - site unreachable',
+          error_details: testError.message,
+          processing_time_ms: processingTime,
+          timestamp: new Date().toISOString()
+        };
+
+        logger.error(`Skipping company ${company.name}: Certificate error`);
+        await this.resultsManager.saveResult(result);
+        await this.processTracker.saveProcessedCompany(company.id, 'SKIPPED', homepage);
+        
+        return result;
+      }
+      throw testError; // Re-throw if it's a different error
+    }
+
+      // Step 2: Determine contact form URL
+      let contactFormUrl = null;
+      
+      // If contact_url is provided AND not empty, use it directly as the contact form URL
+      if (company.contact_url && company.contact_url.trim()) {
+        logger.info('Contact form URL provided directly');
+        contactFormUrl = UrlDetector.normalizeUrl(company.contact_url);
+        logger.info(`Using provided contact_url: ${contactFormUrl}`);
       }
       
+      // If no contact_url provided, find contact page from homepage
       if (!contactFormUrl) {
-        // Find contact page - PASS THE PAGE INSTANCE
-        logger.info('Searching for contact page...');
+        logger.info('Searching for contact page from homepage...');
         const finder = new ContactPageFinder(this.browser);
         contactFormUrl = await finder.findContactPage(homepage, page);
         
@@ -197,7 +228,7 @@ class ContactFormProcessor {
         name: company.name,
         homepage: homepage,
         contact_form_url: contactFormUrl,
-        contact_form_detected: !company.contact_form_url,
+        contact_form_detected: !company.contact_url,
         form_analysis: {
           total_forms_found: formAnalysis.totalForms,
           contact_form_score: formAnalysis.contactForm.score,
@@ -238,7 +269,7 @@ class ContactFormProcessor {
       const result = {
         id: company.id,
         name: company.name,
-        homepage: company.contact_url || company.url_2 || company.url || null,
+        homepage: company.url || null,
         contact_form_url: null,
         status: 'ERROR',
         error: error.message,

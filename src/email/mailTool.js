@@ -231,7 +231,6 @@ async function setupEmailListener() {
     const stat = await pop3.stat();
     lastEmailCount = stat.count;
     await pop3.close();
-    console.log(`📬 Current mailbox has ${lastEmailCount} existing email(s) (will be ignored)`);
   } catch (err) {
     console.error('❌ Failed to get initial email count:', err.message);
   }
@@ -246,21 +245,17 @@ async function checkEmails() {
   try {
     const pop3 = new POP3Client(mailConfig.pop3Host, mailConfig.pop3Port, true);
     
-    console.log('🔌 Connecting to POP3 server...');
     await pop3.connect();
     console.log('✅ Connected');
 
-    console.log('🔐 Authenticating...');
     await pop3.auth(mailConfig.email, mailConfig.password);
     console.log('✅ Authenticated');
 
     const stat = await pop3.stat();
     const emailCount = stat.count;
-    console.log(`📬 Total emails: ${emailCount}`);
 
     // Check if new emails arrived
     if (emailCount > lastEmailCount) {
-      console.log(`\n🆕 ${emailCount - lastEmailCount} new email(s)!\n`);
       
       // Retrieve all new emails
       for (let i = lastEmailCount + 1; i <= emailCount; i++) {

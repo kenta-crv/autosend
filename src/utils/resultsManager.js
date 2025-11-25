@@ -70,7 +70,7 @@ class ResultsManager {
    * Generate message based on result
    */
   generateMessage(result) {
-    logger.info('Generating message for result:', { result });
+    //logger.info('Generating message for result:', { result });
     if (result.status === 'SUCCESS') {
       if (result.submission?.successDetected) {
         return 'Form submitted successfully and success message detected';

@@ -130,10 +130,10 @@ Note: Email listener runs automatically in the background
         logger.info('Running with test data...');
         companies = [
           {
-            id: "4242478",
-            name: 'yyengine',
-            homepage: 'https://yyengine.jp/contact/',
-            contact_url: "https://www.yumemi.co.jp/contacts"
+            id: "12278433",
+            name: 'scotchclub',
+            url: '',
+            contact_url: ""
           },
           // {
           //   id: 2,
