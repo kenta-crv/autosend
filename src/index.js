@@ -129,24 +129,24 @@ Note: Email listener runs automatically in the background
       case 'test': {
         logger.info('Running with test data...');
         companies = [
-          {
-            id: "12278433",
-            name: 'scotchclub',
-            url: '',
-            contact_url: ""
-          },
           // {
-          //   id: 2,
-          //   name: 'BlogTyrant',
-          //   homepage: 'https://www.blogtyrant.com/',
-          //   contact_form_url: null
+          //   id: "12278433",
+          //   name: 'YASUI',
+          //   url: 'yasui-f.co.jp',
+          //   contact_url: ""
           // },
           // {
-          //   id: 3,
-          //   name: 'Tech Insider Talk',
-          //   homepage: 'https://techinsidertalk.com/',
-          //   contact_form_url: null
-          // }
+          //   id: 2,
+          //   name: 'YUMEMI',
+          //   url: 'yumemi.co.jp/ja',
+          //   contact_url: "https://info.yumemi.co.jp/l/886303/2021-09-27/24gyd",
+          // },
+          {
+            id: 3,
+            name: 'Yatho',
+            url: 'http://www.yatoh.co.jp/',
+            contact_url: "",
+          },
         ];
         
         await processDirect(companies);

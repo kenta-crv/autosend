@@ -61,8 +61,11 @@ class FormSubmitter {
         filledCount: fillResults.filledCount 
       });
 
-      // Check and handle acceptance checkboxes BEFORE submitting
+      // Check and handle acceptance checkboxes and radio buttons BEFORE submitting
       await this.handleAcceptanceCheckboxes(page);
+
+      // Extra: Ensure specific privacy policy checkbox is checked (common pattern)
+      await this.ensurePrivacyCheckboxChecked(page);
 
       // Wait a bit for any validation
       await page.waitForTimeout(1000);
@@ -134,42 +137,173 @@ class FormSubmitter {
   }
 
   /**
-   * Handle acceptance/agreement checkboxes
+   * Handle acceptance/agreement checkboxes and radio buttons
    */
   async handleAcceptanceCheckboxes(page) {
     try {
-      const checkboxesChecked = await page.evaluate(() => {
-        let checkedCount = 0;
+      const results = await page.evaluate(() => {
+        let checkboxesChecked = 0;
+        let radioButtonsSelected = 0;
+        const checkboxDetails = [];
         
         // Find ALL checkboxes on the page
         const checkboxes = document.querySelectorAll('input[type="checkbox"]');
         
-        checkboxes.forEach(checkbox => {
+        console.log(`Found ${checkboxes.length} checkbox(es) on the page`);
+        
+        checkboxes.forEach((checkbox, index) => {
+          const checkboxInfo = {
+            index: index,
+            id: checkbox.id,
+            name: checkbox.name,
+            checked: checkbox.checked,
+            disabled: checkbox.disabled,
+            visible: checkbox.offsetParent !== null
+          };
+          
+          checkboxDetails.push(checkboxInfo);
+          console.log(`Checkbox ${index}:`, checkboxInfo);
+          
           if (!checkbox.checked && !checkbox.disabled) {
+            // Method 1: Set checked property
             checkbox.checked = true;
-            checkbox.click(); // Trigger click event
             
-            // Dispatch events to ensure form validation updates
+            // Method 2: Trigger click event
+            checkbox.click();
+            
+            // Method 3: Dispatch multiple events
             checkbox.dispatchEvent(new Event('change', { bubbles: true }));
             checkbox.dispatchEvent(new Event('input', { bubbles: true }));
-            checkbox.dispatchEvent(new Event('click', { bubbles: true }));
+            checkbox.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
             
+            checkboxesChecked++;
+            console.log(`Checked checkbox: ${checkbox.name || checkbox.id}`);
+          }
+        });
+        
+        // Find ALL radio buttons on the page
+        const radioButtons = document.querySelectorAll('input[type="radio"]');
+        const radioGroups = {};
+        
+        console.log(`Found ${radioButtons.length} radio button(s) on the page`);
+        
+        // Group radio buttons by name
+        radioButtons.forEach(radio => {
+          const name = radio.name || 'unnamed';
+          if (!radioGroups[name]) {
+            radioGroups[name] = [];
+          }
+          radioGroups[name].push(radio);
+        });
+        
+        // Select first available radio button in each group
+        Object.keys(radioGroups).forEach(groupName => {
+          const group = radioGroups[groupName];
+          
+          // Check if any radio in this group is already selected
+          const hasSelection = group.some(radio => radio.checked);
+          
+          console.log(`Radio group "${groupName}": ${group.length} buttons, hasSelection: ${hasSelection}`);
+          
+          // If no selection, select the first non-disabled radio button
+          if (!hasSelection) {
+            const firstAvailable = group.find(radio => !radio.disabled);
+            if (firstAvailable) {
+              firstAvailable.checked = true;
+              firstAvailable.click();
+              
+              // Dispatch events to ensure form validation updates
+              firstAvailable.dispatchEvent(new Event('change', { bubbles: true }));
+              firstAvailable.dispatchEvent(new Event('input', { bubbles: true }));
+              firstAvailable.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+              
+              radioButtonsSelected++;
+              console.log(`Selected radio button: ${firstAvailable.name} = ${firstAvailable.value}`);
+            }
+          }
+        });
+        
+        return { 
+          checkboxesChecked, 
+          radioButtonsSelected,
+          checkboxDetails,
+          totalCheckboxes: checkboxes.length,
+          totalRadioButtons: radioButtons.length
+        };
+      });
+
+      logger.info('Checkbox/Radio handling results:', {
+        checkboxesChecked: results.checkboxesChecked,
+        radioButtonsSelected: results.radioButtonsSelected,
+        totalCheckboxes: results.totalCheckboxes,
+        totalRadioButtons: results.totalRadioButtons,
+        checkboxDetails: results.checkboxDetails
+      });
+
+      if (results.checkboxesChecked > 0 || results.radioButtonsSelected > 0) {
+        logger.info(`Checked ${results.checkboxesChecked} checkbox(es) and selected ${results.radioButtonsSelected} radio button group(s)`);
+        // Wait a moment for form validation to process
+        await page.waitForTimeout(500);
+      } else {
+        logger.warn('No checkboxes or radio buttons were selected. Check the details above.');
+      }
+
+      return results.checkboxesChecked + results.radioButtonsSelected;
+    } catch (error) {
+      logger.warn('Error handling checkboxes and radio buttons:', { error: error.message });
+      return 0;
+    }
+  }
+
+  /**
+   * Ensure privacy/agreement checkboxes are checked (additional safeguard)
+   */
+  async ensurePrivacyCheckboxChecked(page) {
+    try {
+      const checked = await page.evaluate(() => {
+        // Common patterns for privacy/agreement checkboxes
+        const privacyKeywords = [
+          'privacy', 'プライバシー', 'agree', '同意', 'terms', '規約',
+          'policy', 'ポリシー', 'accept', '承諾', 'consent', '了承'
+        ];
+        
+        let checkedCount = 0;
+        const checkboxes = document.querySelectorAll('input[type="checkbox"]');
+        
+        checkboxes.forEach(checkbox => {
+          const name = (checkbox.name || '').toLowerCase();
+          const id = (checkbox.id || '').toLowerCase();
+          const label = checkbox.labels && checkbox.labels[0] ? 
+            (checkbox.labels[0].textContent || '').toLowerCase() : '';
+          
+          const searchText = name + ' ' + id + ' ' + label;
+          
+          // Check if this looks like a privacy/agreement checkbox
+          const isPrivacyCheckbox = privacyKeywords.some(keyword => 
+            searchText.includes(keyword.toLowerCase())
+          );
+          
+          if (isPrivacyCheckbox && !checkbox.checked && !checkbox.disabled) {
+            console.log(`Found privacy checkbox: ${checkbox.name || checkbox.id}`);
+            checkbox.checked = true;
+            checkbox.click();
+            checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+            checkbox.dispatchEvent(new Event('input', { bubbles: true }));
             checkedCount++;
           }
         });
         
         return checkedCount;
       });
-
-      if (checkboxesChecked > 0) {
-        logger.info(`Checked ${checkboxesChecked} checkbox(es)`);
-        // Wait a moment for form validation to process
-        await page.waitForTimeout(500);
+      
+      if (checked > 0) {
+        logger.info(`Additionally ensured ${checked} privacy checkbox(es) are checked`);
+        await page.waitForTimeout(300);
       }
-
-      return checkboxesChecked;
+      
+      return checked;
     } catch (error) {
-      logger.warn('Error handling checkboxes:', { error: error.message });
+      logger.warn('Error in ensurePrivacyCheckboxChecked:', { error: error.message });
       return 0;
     }
   }
@@ -184,6 +318,12 @@ class FormSubmitter {
 
       for (const input of inputs) {
         try {
+          // Skip checkboxes and radio buttons - they're handled by handleAcceptanceCheckboxes
+          if (input.type === 'checkbox' || input.type === 'radio') {
+            logger.debug(`Skipping ${input.type} field: ${input.name || input.id} (handled separately)`);
+            continue;
+          }
+
           const value = this.getValueForField(input);
           
           if (!value) {
