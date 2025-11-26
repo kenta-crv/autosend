@@ -91,7 +91,6 @@ class ContactFormProcessor {
 
       // Step 1: Determine homepage URL
       let homepage = null;
-      console.log("To process this company",company);
       if (company.url) {
         homepage = UrlDetector.normalizeUrl(company.url);
         logger.info(`Using url as homepage: ${homepage}`);
