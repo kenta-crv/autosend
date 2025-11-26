@@ -133,16 +133,32 @@ npm install
 Create a `.env` file in the root directory:
 
 ```env
-# Puppeteer Settings
+# Browser Configuration
 HEADLESS=true
+BROWSER_TIMEOUT=30000
+PAGE_LOAD_TIMEOUT=30000
 
-# Test Data (will be submitted to forms)
-TEST_EMAIL=your-email@example.com
-TEST_PHONE=+1234567890
-TEST_MESSAGE=Your test message here
+# Redis Configuration (for Bull queue)
+REDIS_HOST=localhost
+REDIS_PORT=6379
+REDIS_PASSWORD=
 
-# Queue Settings (optional)
+# Queue Configuration
+QUEUE_CONCURRENCY=3
 QUEUE_DELAY_BETWEEN_JOBS=2000
+
+# Form Submission Configuration
+TEST_EMAIL=test@example.com
+TEST_PHONE=+1234567890
+TEST_WEBSITE=mail@ebisu-hotel.tokyo
+TEST_MESSAGE=This is a test submission from automated form filler.
+
+# Logging
+LOG_LEVEL=info
+LOG_FILE_PATH=./logs
+
+# Results
+RESULTS_OUTPUT_PATH=./results
 ```
 
 ### 3. Prepare Your Data
@@ -193,10 +209,20 @@ npm start test
 | Variable | Description | Example |
 |----------|-------------|---------|
 | `HEADLESS` | Run browser in headless mode | `true` or `false` |
-| `TEST_EMAIL` | Email address submitted in forms | `your-email@example.com` |
-| `TEST_PHONE` | Phone number submitted in forms | `+1234567890` |
-| `TEST_MESSAGE` | Message text submitted in forms | `Your test message here` |
+| `BROWSER_TIMEOUT` | Browser operation timeout in ms | `30000` |
+| `PAGE_LOAD_TIMEOUT` | Page load timeout in ms | `30000` |
+| `REDIS_HOST` | Redis server host | `localhost` |
+| `REDIS_PORT` | Redis server port | `6379` |
+| `REDIS_PASSWORD` | Redis server password (leave empty if none) | `` |
+| `QUEUE_CONCURRENCY` | Number of concurrent jobs | `3` |
 | `QUEUE_DELAY_BETWEEN_JOBS` | Delay between processing jobs in ms | `2000` |
+| `TEST_EMAIL` | Email address submitted in forms | `test@example.com` |
+| `TEST_PHONE` | Phone number submitted in forms | `+1234567890` |
+| `TEST_WEBSITE` | Website/company email submitted in forms | `mail@example.com` |
+| `TEST_MESSAGE` | Message text submitted in forms | `This is a test submission...` |
+| `LOG_LEVEL` | Logging level | `info`, `debug`, `warn`, `error` |
+| `LOG_FILE_PATH` | Path for log files | `./logs` |
+| `RESULTS_OUTPUT_PATH` | Path for output results | `./results` |
 
 ### Email Monitoring Configuration
 
