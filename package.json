@@ -1,0 +1,43 @@
+{
+  "name": "contact-form-automation",
+  "version": "2.0.0",
+  "description": "Automated contact form finder and submission system",
+  "main": "src/index.js",
+   "scripts": {
+    "start": "node src/index.js",
+    "worker": "node src/worker.js",
+    "dev": "nodemon src/index.js",
+    "pm2:start": "pm2 start ecosystem.config.js",
+    "pm2:start:worker": "pm2 start ecosystem.config.js --only contact-form-worker",
+    "pm2:start:email": "pm2 start ecosystem.config.js --only email-listener",
+    "pm2:stop": "pm2 stop all",
+    "pm2:restart": "pm2 restart all",
+    "pm2:delete": "pm2 delete all",
+    "pm2:logs": "pm2 logs",
+    "pm2:logs:worker": "pm2 logs contact-form-worker",
+    "pm2:logs:email": "pm2 logs email-listener",
+    "pm2:monit": "pm2 monit",
+    "pm2:status": "pm2 status",
+    "pm2:save": "pm2 save"
+  },
+  "dependencies": {
+    "axios": "^1.6.0",
+    "bull": "^4.11.0",
+    "cheerio": "^1.0.0-rc.12",
+    "csv-parser": "^3.0.0",
+    "dotenv": "^16.6.1",
+    "imap": "^0.8.19",
+    "mailparser": "^3.9.0",
+    "nodemailer": "^7.0.10",
+    "poplib": "^0.1.7",
+    "puppeteer": "^21.0.0",
+    "sqlite3": "^5.1.7",
+    "winston": "^3.11.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
